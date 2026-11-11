@@ -24,8 +24,16 @@ class Controls(ttk.Frame):
         self.status = ttk.Label(self, anchor="center")
         self.status.grid(row=1, column=0, columnspan=3, pady=(10, 0))
 
-    def update_state(self, game: Game) -> None:
+    def update_state(
+        self, game: Game, animation_message: str | None = None,
+    ) -> None:
         """Обновить доступность действий и сообщение игроку."""
+        if animation_message is not None:
+            for button in (self.start, self.hit, self.stand):
+                button.state(["disabled"])
+            self.status.configure(text=animation_message)
+            return
+
         player_turn = game.phase is RoundPhase.PLAYER
         can_start = game.phase in (RoundPhase.READY, RoundPhase.FINISHED)
         self.start.state(["!disabled" if can_start else "disabled"])
@@ -44,4 +52,6 @@ class Controls(ttk.Frame):
             RoundResult.PLAYER_BLACKJACK: "Blackjack! Вы победили!",
             RoundResult.DEALER_BLACKJACK: "У дилера blackjack",
         }
-        self.status.configure(text=results.get(game.result, messages[game.phase]))
+        self.status.configure(
+            text=results.get(game.result, messages[game.phase]),
+        )

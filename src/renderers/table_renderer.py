@@ -1,8 +1,18 @@
 """Отрисовка карт и очков средствами Tkinter Canvas."""
 
 import tkinter as tk
+from dataclasses import dataclass
 
-from src.models import Card, Game, RoundPhase, Suit
+from src.models import Card, Hand, Suit
+
+
+@dataclass(frozen=True)
+class CardFlight:
+    """Карта в движении, её рука назначения и доля пройденного пути."""
+
+    card: Card | None
+    to_dealer: bool
+    progress: float
 
 
 class TableRenderer:
@@ -12,41 +22,60 @@ class TableRenderer:
         """Сохранить холст для отрисовки."""
         self.canvas = canvas
 
-    def render(self, game: Game) -> None:
-        """Перерисовать стол, показывая только доступные игроку карты."""
+    def render(
+        self,
+        player: tuple[Card | None, ...],
+        dealer: tuple[Card | None, ...],
+        flight: CardFlight | None = None,
+    ) -> None:
+        """Нарисовать выложенные карты и текущий кадр движения."""
         self.canvas.delete("all")
         width = max(self.canvas.winfo_width(), 480)
         height = max(self.canvas.winfo_height(), 280)
-        self._hand(
-            "Дилер", game.dealer_visible_cards, game.dealer_visible_score,
-            20, width, game.phase is RoundPhase.PLAYER,
+        dealer_slot = self._hand(
+            "Дилер", dealer, 20, width,
+            flight is not None and flight.to_dealer,
         )
-        self._hand(
-            "Игрок", game.player_cards, game.player_score,
-            height / 2 + 10, width,
+        player_slot = self._hand(
+            "Игрок", player, height / 2 + 10, width,
+            flight is not None and not flight.to_dealer,
         )
-        self._card(None, width - 90, height / 2 - 45)
+        deck_x, deck_y = width - 90, height / 2 - 45
+        self._card(None, deck_x, deck_y)
         self.canvas.create_text(
             width - 55, height / 2 + 60, text="Колода", fill="white",
             font=("Arial", 11),
         )
+        if flight is not None:
+            target_x, target_y = (
+                dealer_slot if flight.to_dealer else player_slot
+            )
+            progress = 1 - (1 - flight.progress) ** 2
+            self._card(
+                flight.card,
+                deck_x + (target_x - deck_x) * progress,
+                deck_y + (target_y - deck_y) * progress,
+            )
 
     def _hand(
-        self, title: str, cards: tuple[Card, ...], score: int,
-        y: float, width: int, hidden: bool = False,
-    ) -> None:
-        """Разместить руку, уменьшая шаг между картами при необходимости."""
-        suffix = " (открытые)" if hidden else ""
+        self, title: str, cards: tuple[Card | None, ...],
+        y: float, width: int, incoming: bool,
+    ) -> tuple[float, float]:
+        """Разместить карты и вернуть координаты следующего места."""
+        visible = Hand()
+        for card in cards:
+            if card is not None:
+                visible.add_card(card)
+        suffix = " (открытые)" if None in cards else ""
         self.canvas.create_text(
-            24, y, anchor="nw", text=f"{title}: {score}{suffix}",
+            24, y, anchor="nw", text=f"{title}: {visible.score}{suffix}",
             fill="white", font=("Arial", 15, "bold"),
         )
-        count = len(cards) + int(hidden)
+        count = len(cards) + int(incoming)
         step = min(86, (width - 170) / max(count - 1, 1))
         for index, card in enumerate(cards):
             self._card(card, 24 + index * step, y + 32)
-        if hidden:
-            self._card(None, 24 + len(cards) * step, y + 32)
+        return 24 + len(cards) * step, y + 32
 
     def _card(self, card: Card | None, x: float, y: float) -> None:
         """Нарисовать лицевую сторону карты или рубашку."""
